@@ -4,14 +4,14 @@
     "keywords":"mqtt,wifi,iot,homeassistant",
     "authors": [
       {
-        "name": "Patrick Lapointe",
+        "name": "chriss158",
         "maintainer": true
       }
     ],
     "repository":
     {
       "type": "git",
-      "url": "https://github.com/plapointe6/HAMqttDevice.git"
+      "url": "https://github.com/chriss158/HAMqttDevice.git"
     },
     "version": "1.0.0",
     "frameworks": "arduino",
