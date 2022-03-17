@@ -3,16 +3,19 @@
 HAMqttDevice::HAMqttDevice(
     const String &name,
     const DeviceType type,
-    const String &haMQTTPrefix) : _name(name),
-                                  _type(type)
+    const String &haMQTTPrefix,
+    const String &nodeId) : _name(name),
+                            _type(type)
 {
     // Id = name to lower case replacing spaces by underscore (ex: name="Kitchen Light" -> id="kitchen_light")
     _identifier = name;
     _identifier.replace(' ', '_');
     _identifier.toLowerCase();
+    _nodeId = nodeId;
+    _mqttPrefix = haMQTTPrefix;
 
     // Define the MQTT topic of the device
-    _topic = haMQTTPrefix + '/' + deviceTypeToStr(_type) + '/' + _identifier;
+    _topic = generateTopic();
 
     // Preconfigure mandatory config vars that we already know
     addConfigVar("~", _topic);
@@ -23,10 +26,13 @@ HAMqttDevice::HAMqttDevice(
     switch (type)
     {
     case DeviceType::ALARM_CONTROL_PANEL:
+    case DeviceType::COVER:
     case DeviceType::FAN:
     case DeviceType::LIGHT:
     case DeviceType::LOCK:
+    case DeviceType::NUMBER:
     case DeviceType::SWITCH:
+    case DeviceType::BUTTON:
         enableCommandTopic();
     default:
         break;
@@ -37,9 +43,11 @@ HAMqttDevice::HAMqttDevice(
     {
     case DeviceType::ALARM_CONTROL_PANEL:
     case DeviceType::BINARY_SENSOR:
+    case DeviceType::COVER:
     case DeviceType::FAN:
     case DeviceType::LIGHT:
     case DeviceType::LOCK:
+    case DeviceType::NUMBER:
     case DeviceType::SENSOR:
     case DeviceType::SWITCH:
         enableStateTopic();
@@ -68,15 +76,39 @@ HAMqttDevice &HAMqttDevice::enableAttributesTopic()
     return *this;
 }
 
+HAMqttDevice &HAMqttDevice::enableAvailabilityTopic(const String &topic)
+{
+    addConfigVar("avty_t", (topic == NULL || topic.isEmpty()) ? "~/availability" : topic);
+    return *this;
+}
+
 HAMqttDevice &HAMqttDevice::addConfigVar(const String &name, const String &value)
 {
     _configVars.push_back({name, value});
+    return *this;
+}
+HAMqttDevice &HAMqttDevice::remConfigVar(const String &key)
+{
+    _configVars.erase(
+        std::remove_if(_configVars.begin(), _configVars.end(), [&](ConfigVar const &configVar)
+                       { return configVar.key == key; }),
+        _configVars.end());
     return *this;
 }
 
 HAMqttDevice &HAMqttDevice::addAttribute(const String &name, const String &value)
 {
     _attributes.push_back({name, value});
+    return *this;
+}
+
+HAMqttDevice &HAMqttDevice::setNodeId(const String &nodeId)
+{
+    _nodeId = nodeId;
+    _topic = generateTopic();
+    remConfigVar("~");
+    //_configVars.insert(_configVars.begin(), {"~", _topic});
+    addConfigVar("~", _topic);
     return *this;
 }
 
@@ -96,7 +128,7 @@ const String HAMqttDevice::getConfigPayload() const
         configPayload.concat(_configVars[i].key);
         configPayload.concat("\":");
 
-        bool valueIsDictionnary = _configVars[i].value[0] == '{';
+        bool valueIsDictionnary = _configVars[i].value[0] == '{' && _configVars[i].value[1] != '{';
 
         if (!valueIsDictionnary)
             configPayload.concat('"');
@@ -130,6 +162,18 @@ const String HAMqttDevice::getAttributesPayload() const
     return attrPayload;
 }
 
+String HAMqttDevice::generateTopic()
+{
+    if (_nodeId == NULL || _nodeId.isEmpty())
+    {
+        return _mqttPrefix + '/' + deviceTypeToStr(_type) + '/' + _identifier;
+    }
+    else
+    {
+        return _mqttPrefix + '/' + deviceTypeToStr(_type) + '/' + _nodeId + '/' + _identifier;
+    }
+}
+
 String HAMqttDevice::deviceTypeToStr(DeviceType type)
 {
     switch (type)
@@ -156,6 +200,10 @@ String HAMqttDevice::deviceTypeToStr(DeviceType type)
         return "climate";
     case DeviceType::VACUUM:
         return "vacuum";
+    case DeviceType::NUMBER:
+        return "number";
+    case DeviceType::BUTTON:
+        return "button";
     default:
         return "[Unknown DeviceType]";
     }
